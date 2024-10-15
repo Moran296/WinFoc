@@ -1,0 +1,9 @@
+[package]
+name = "winfoc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+xcb = "1.4.0"
+x11rb = "0.13.1"
+libwmctl = { git = "https://github.com/Moran296/wmctl" }
