@@ -1,9 +1,6 @@
 use libwmctl;
 use libwmctl::Window;
 use std::cmp;
-use std::env;
-
-use std::process::Command;
 
 enum Direction {
     LEFT,
@@ -29,6 +26,7 @@ fn win_debug(wins: &Vec<Window>) {
     for w in wins {
         print!("id: {}\n", w.id);
         print!("name: {}\n", w.name().unwrap());
+        print!("desktop: {}\n", w.desktop().unwrap());
         print!("g: {:?}\n", w.geometry().unwrap());
         print!("vg: {:?}\n", w.visual_geometry().unwrap());
         print!("state: {:?}\n", w.state().unwrap());
@@ -77,9 +75,10 @@ fn find_obscured_windows(windows: &Vec<Window>) -> Vec<u32> {
 }
 
 fn get_windows(desktop: i32) -> Vec<Window> {
-    let windows = libwmctl::windows_stack_order()
+    let windows = libwmctl::windows_by_stack_order()
         .unwrap()
         .into_iter()
+        .rev()
         .filter(|w| w.desktop().unwrap() == desktop)
         .filter(|w| !(w.state().unwrap().contains(&libwmctl::State::Hidden)))
         .filter(|w| w.mapped().unwrap() == libwmctl::MapState::Viewable)
@@ -99,7 +98,7 @@ fn get_y(window: &Window) -> i32 {
     window.visual_geometry().unwrap().1
 }
 
-fn find_next_window(dir: Direction, active_win: &Window, windows: &Vec<Window>) -> Option<u32> {
+fn find_next_window(dir: Direction, active_win: &Window, windows: &Vec<Window>) -> Option<Window> {
     let (current_x, current_y, _, _) = active_win.visual_geometry().unwrap();
 
     match dir {
@@ -107,63 +106,43 @@ fn find_next_window(dir: Direction, active_win: &Window, windows: &Vec<Window>) 
             .into_iter()
             .filter(|w| get_x(w) < current_x)
             .max_by(|a, b| get_x(a).cmp(&get_x(b)))
-            .and_then(|w| Some(w.id)),
+            .and_then(|w| Some(w.clone())),
         Direction::RIGHT => windows
             .into_iter()
             .filter(|w| get_x(w) > current_x)
             .min_by(|a, b| get_x(a).cmp(&get_x(b)))
-            .and_then(|w| Some(w.id)),
+            .and_then(|w| Some(w.clone())),
         Direction::UP => windows
             .into_iter()
             .filter(|w| get_y(w) < current_y)
             .max_by(|a, b| get_y(a).cmp(&get_y(b)))
-            .and_then(|w| Some(w.id)),
+            .and_then(|w| Some(w.clone())),
         Direction::DOWN => windows
             .into_iter()
             .filter(|w| get_y(w) > current_y)
             .min_by(|a, b| get_y(a).cmp(&get_y(b)))
-            .and_then(|w| Some(w.id)),
+            .and_then(|w| Some(w.clone())),
     }
 }
 
-fn focus_window_with_wmctrl(window_id: u32) {
-    // Convert the window ID to a hexadecimal string (which wmctrl expects)
-    let window_id_hex = format!("0x{:x}", window_id);
+fn win_focus(dir: Direction) {
+    let active_win = libwmctl::active();
+    let windows = get_windows(active_win.desktop().unwrap());
 
-    // Run the wmctrl command to focus the window
-    let output = Command::new("wmctrl")
-        .arg("-ia")
-        .arg(&window_id_hex) // Pass the window ID in hex format
-        .output() // Execute the command and capture the output
-        .expect("Failed to execute wmctrl command");
-
-    // Check if the command was successful
-    if output.status.success() {
-        println!("Successfully focused window with ID: {}", window_id_hex);
+    if let Some(next_win) = find_next_window(dir, &active_win, &windows) {
+        next_win.focus().unwrap();
     } else {
-        eprintln!(
-            "Failed to focus window. Error: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
+        print!("no next window\n");
     }
 }
 
 fn main() {
-    let args: Vec<String> = env::args().skip(1).collect();
+    let args: Vec<String> = std::env::args().skip(1).collect();
     let mut dir: Direction = Direction::LEFT;
 
     if !args.is_empty() {
         dir = Direction::from(args[0].as_str())
     }
 
-    let active_win = libwmctl::active();
-    let windows = get_windows(active_win.desktop().unwrap());
-
-    if let Some(next_win) = find_next_window(dir, &active_win, &windows) {
-        focus_window_with_wmctrl(next_win);
-    } else {
-        print!("no next window\n");
-    }
-
-    // win_debug(&windows);
+    win_focus(dir);
 }
