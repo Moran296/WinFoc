@@ -74,12 +74,17 @@ fn find_obscured_windows(windows: &Vec<Window>) -> Vec<u32> {
     return obscured;
 }
 
-fn get_windows(desktop: i32) -> Vec<Window> {
+fn window_is_in_desktop(w: &Window, desktop: u32) -> bool {
+    // w is in desktop also if it is "not" under this desktop but sticky
+    w.desktop().unwrap() as u32 == desktop || w.state().unwrap().contains(&libwmctl::State::Sticky)
+}
+
+fn get_windows(desktop: u32) -> Vec<Window> {
     let windows = libwmctl::windows_by_stack_order()
         .unwrap()
         .into_iter()
         .rev()
-        .filter(|w| w.desktop().unwrap() == desktop)
+        .filter(|w| window_is_in_desktop(w, desktop))
         .filter(|w| !(w.state().unwrap().contains(&libwmctl::State::Hidden)))
         .filter(|w| w.mapped().unwrap() == libwmctl::MapState::Viewable)
         .collect();
@@ -127,7 +132,8 @@ fn find_next_window(dir: Direction, active_win: &Window, windows: &Vec<Window>) 
 
 fn win_focus(dir: Direction) {
     let active_win = libwmctl::active();
-    let windows = get_windows(active_win.desktop().unwrap());
+    let desktop_id = libwmctl::active_desktop().unwrap();
+    let windows = get_windows(desktop_id);
 
     if let Some(next_win) = find_next_window(dir, &active_win, &windows) {
         next_win.focus().unwrap();
